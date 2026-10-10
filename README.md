@@ -4,13 +4,17 @@ I'm designing a small, round arc-reactor lookalike that produces light in cool p
 
 The PCB is 90 mm across, with 24 blue LEDs around the edge, a knob in the middle and a XIAO near the top for USB-C access. Six groups of four LEDs will be controlled independently. Tiny reactor, zero fusion involved.
 
+![Angled view of the Lichtreaktor PCB in KiCad's 3D viewer](assets/kicad/pcb-3d-angle.png)
+
+The LEDs look red in KiCad's default 3D model, but the actual parts are blue. The XIAO and rotary encoder don't have 3D models loaded, so their positions look empty here.
+
 ## Where it's at
 
 The schematic and PCB layout are done! All 24 LEDs are placed, the traces are routed, and both copper layers have a GND fill. The LEDs, transistors, encoder and XIAO sit on the front; the resistors sit on the back. Getting everything onto a round board took a few attempts, but it fits.
 
 The latest KiCad check (10 October 2026) reports **0 errors, 0 unconnected items and 0 schematic/PCB mismatches**. There are still 24 silkscreen warnings: some printed outlines or labels overlap pads, each other or the board edge. Those are accepted for this layout; parts of the print may be clipped during manufacturing. The USB connector intentionally sticks out a little at the top.
 
-This is still a design, not a tested reactor. Firmware, final part and mechanical checks, supplier prices, fabrication files and the actual soldering are next.
+This is still a design, not a tested reactor. The [firmware](firmware/README.md) is written, with five light patterns, encoder controls, adjustable speed, a group test and USB diagnostics. Final part and mechanical checks, supplier prices, fabrication files, soldering and testing on the actual board are next.
 
 ## How it works
 
@@ -80,3 +84,19 @@ All LEDs use 0-degree rotation for this calculation, and coordinates are rounded
 ## Design files
 
 Open [the KiCad project](hardware/Lichtreaktor/Lichtreaktor.kicad_pro) to see the schematic and PCB. The project includes its XIAO symbol and footprint libraries; their source and adaptations are documented [here](hardware/Lichtreaktor/libraries/SOURCES.md).
+
+## A closer look
+
+### PCB layout
+
+![Routed PCB layout with GND fills in KiCad](assets/kicad/pcb-layout.png)
+
+### Front and back
+
+![Front of the PCB in KiCad's 3D viewer](assets/kicad/pcb-3d-front.png)
+
+![Back of the PCB with the resistors in KiCad's 3D viewer](assets/kicad/pcb-3d-back.png)
+
+### Schematic
+
+![Complete Lichtreaktor schematic with six LED groups and the XIAO RP2040](assets/kicad/schematic.png)

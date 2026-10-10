@@ -7,3 +7,4 @@ AGENTS.md
 *.lck
 *-backups/
 .history/
+firmware/build/
