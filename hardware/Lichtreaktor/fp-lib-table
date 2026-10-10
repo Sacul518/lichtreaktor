@@ -1,0 +1,3 @@
+(fp_lib_table
+ (lib (name "Seeed_XIAO") (type "KiCad") (uri "${KIPRJMOD}/libraries/Seeed_XIAO.pretty") (options "") (descr "Official Seeed RP2040 DIP footprint; unresolved 3D references removed"))
+)

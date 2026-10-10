@@ -6,3 +6,4 @@ AGENTS.md
 *.kicad_prl
 *.lck
 *-backups/
+.history/

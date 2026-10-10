@@ -1,0 +1,3 @@
+(sym_lib_table
+ (lib (name "Seeed_XIAO") (type "KiCad") (uri "${KIPRJMOD}/libraries/Seeed_XIAO_RP2040.kicad_sym") (options "") (descr "Seeed XIAO RP2040; project adaptation for 14-pin socket mounting"))
+)
