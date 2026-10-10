@@ -6,7 +6,17 @@ The PCB is 90 mm across, with 24 blue LEDs around the edge, a knob in the middle
 
 ## Where it's at
 
-The schematic is complete and passes KiCad's electrical rules check. PCB placement is in progress: the encoder, XIAO and first 12 LEDs are positioned. Routing, firmware and a physical build are still ahead.
+The schematic and PCB layout are done! All 24 LEDs are placed, the traces are routed, and both copper layers have a GND fill. The LEDs, transistors, encoder and XIAO sit on the front; the resistors sit on the back. Getting everything onto a round board took a few attempts, but it fits.
+
+The latest KiCad check (10 October 2026) reports **0 errors, 0 unconnected items and 0 schematic/PCB mismatches**. There are still 24 silkscreen warnings: some printed outlines or labels overlap pads, each other or the board edge. Those are accepted for this layout; parts of the print may be clipped during manufacturing. The USB connector intentionally sticks out a little at the top.
+
+This is still a design, not a tested reactor. Firmware, final part and mechanical checks, supplier prices, fabrication files and the actual soldering are next.
+
+## How it works
+
+USB supplies 5 V through the XIAO. Each LED has its own 220 Ω resistor, and each group of four shares a BC337 transistor that switches its connection to GND. The XIAO drives the six transistors through 470 Ω base resistors; 100 kΩ pull-downs keep them off when the control pins aren't being driven. PWM will let the firmware dim each group separately.
+
+The encoder has two rotation signals and a push button, with three 10 kΩ pull-ups to 3.3 V. Turning it will change the brightness, and pressing it will change the pattern. The GND fills keep clearance from the other nets and use thermal reliefs so the pads are easier to hand-solder.
 
 ## What will I need to build this?
 
@@ -65,7 +75,7 @@ $$
 y_{\mathrm{KiCad},1}=65-38\cos(30^\circ)\approx32.09\,\mathrm{mm}
 $$
 
-All LEDs use 0-degree rotation for this calculation, and coordinates are rounded to 0.01 mm. Neighbouring LED centres are about $2\cdot38\sin(13^\circ/2)=8.60\,\mathrm{mm}$ apart. Final clearance checks still come after placement.
+All LEDs use 0-degree rotation for this calculation, and coordinates are rounded to 0.01 mm. Neighbouring LED centres are about $2\cdot38\sin(13^\circ/2)=8.60\,\mathrm{mm}$ apart. Some resistor positions were adjusted by hand to avoid overlaps; the final layout passes KiCad's copper-clearance and courtyard checks.
 
 ## Design files
 
