@@ -5,12 +5,31 @@ Arduino C++ for the **Seeed XIAO RP2040**, using Earle Philhower's **Arduino-Pic
 ## Controls
 
 - Turn the encoder to change brightness in steps of 8, from 0 (off) to 255.
-- Press and release to cycle through steady light, breathing, a rotating trail, alternating groups and a double pulse.
+- Press and release to cycle through the ten patterns below.
 - Hold and turn to change effect speed from 25% to 300% in steps of 25%. A speed change restarts the current effect. Release without changing the pattern.
 - Hold for 1.2 seconds without turning to enter or leave the LED group test. In the test, turning selects one of the six groups; a short press leaves the test. Brightness is retained, so turn it up before entering if it is currently zero.
 - Starts in steady mode at brightness 80/255. Settings reset when power is removed.
 
-The encoder is polled continuously, the button is debounced for 25 ms, and LED values are recalculated and written on every loop without blocking delays. PWM runs at 2 kHz. All LEDs within a group share the same output; this board cannot control individual LEDs separately.
+The encoder is checked continuously and the button is debounced for 25 ms. Effects update at up to 100 frames per second. Brightness uses integer maths, and PWM values are only written when they change. The hardware keeps the 2 kHz PWM running between updates. Each group of four LEDs shares an output, so the LEDs within a group always act together.
+
+## Patterns
+
+| Number | Pattern | What it does |
+| --- | --- | --- |
+| 1 | Steady | All groups stay on |
+| 2 | Breathing | All groups fade up and down together |
+| 3 | Rotating trail | One bright head travels around the ring with a dim tail |
+| 4 | Alternating | Odd and even groups take turns |
+| 5 | Double pulse | Two fading flashes followed by a gap |
+| 6 | Scanner | A bright head moves from group 1 to 6 and back |
+| 7 | Wave | Groups fade with staggered timing, making a travelling wave |
+| 8 | Charge | The ring fills group by group, then empties |
+| 9 | Sparks | Short fading flashes in a fixed, irregular order |
+| 10 | Twin comets | Two bright heads travel in opposite directions and meet |
+
+All effects use the same speed and brightness controls. Pattern numbers shown over USB start at 1; `selected` inside `patternLevel()` starts at 0.
+
+The XIAO's built-in colour LEDs show the current mode: blue for manual playback, green for automatic playback, red plus green for pause, and red for the group test. The test indication takes priority. These LEDs use the GPIO pins listed in [Seeed's documentation](https://wiki.seeedstudio.com/XIAO-RP2040/) and turn on when their pin is low.
 
 ## USB diagnostics
 
@@ -19,16 +38,20 @@ Open a serial monitor at 115200 baud. USB serial is optional; the board does not
 | Command | Action |
 | --- | --- |
 | `?` | Show command help |
-| `s` | Show pattern, brightness, speed, test mode and selected group |
+| `s` | Show pattern, brightness, speed, test group, automatic playback and pause state |
 | `n` | Next pattern and leave test mode |
+| `a` | Toggle automatic playback: advance to the next pattern every 10 seconds |
+| `p` | Pause / resume the effect and automatic playback timer |
 | `+` / `-` | Increase / decrease brightness |
 | `>` / `<` | Increase / decrease speed |
 | `t` | Toggle the group test, starting at group 1 |
 | `1` through `6` | Enter the test and select that LED group |
 
-Pattern and group numbers in the status output start at 1. Only the selected group lights in test mode. For example, send `1`, then `2`, through `6` to check each transistor and its four LEDs. If brightness is zero, use `+` to raise it. `n` returns to an effect. USB processing is limited to eight incoming characters per loop, and pending replies wait for output buffer space.
+The status fields are `mode` (pattern), `b` (brightness), `speed`, `test`, `g` (group), `auto` and `pause`. Pattern and group numbers start at 1. Only the selected group lights in test mode. For example, send `1`, then `2`, through `6` to check each transistor and its four LEDs. If brightness is zero, use `+` to raise it. `n` returns to an effect. USB processing is limited to eight incoming characters per loop, and pending replies wait for output buffer space.
 
-Codex helped write the firmware; comments in the sketch identify that assistance. Hardware validation is still pending.
+Automatic playback waits during the group test and restarts its ten-second timer when you leave the test. Changing a pattern or speed also restarts that timer. Pause holds the current effect position; brightness and group selection still work. Selecting a pattern or changing speed while paused resets its position and keeps it paused. Send `p` again to resume. For example, `a` starts the automatic show, `p` freezes it, and another `p` continues it. Automatic playback and pause both start disabled after power-up.
+
+Codex helped write the firmware. It compiles, but it still needs testing on the assembled board.
 
 ## Pin mapping
 
@@ -62,7 +85,7 @@ arduino-cli compile --fqbn rp2040:rp2040:seeed_xiao_rp2040 --warnings all --outp
 
 Alternatively, open `lichtreaktor/lichtreaktor.ino` in Arduino IDE, install the same Arduino-Pico core using its package URL, and select **Seeed XIAO RP2040**. Do not select the Plus or RP2350 board.
 
-The build produces `build/lichtreaktor.ino.uf2`. To flash it, connect the XIAO by USB while holding **BOOT**, then copy that UF2 onto the **RPI-RP2** drive. This replaces its existing firmware. On a Mac, from the repository root:
+The build produces `firmware/build/lichtreaktor.ino.uf2`. To flash it, connect the XIAO by USB while holding **BOOT**, then copy that UF2 onto the **RPI-RP2** drive. This replaces its existing firmware. On a Mac, from the repository root:
 
 ```sh
 cp -X firmware/build/lichtreaktor.ino.uf2 /Volumes/RPI-RP2/

@@ -7,15 +7,18 @@
 
 // Arduino-Pico uses RP2040 GPIO numbers, not the numbers printed after D.
 constexpr uint8_t LED_PINS[] = {26, 27, 28, 29, 6, 7}; // D0–D5, groups 1–6
+constexpr uint8_t STATUS_LED_PINS[] = {PIN_LED_R, PIN_LED_G, PIN_LED_B};
 constexpr uint8_t ENCODER_A_PIN = 0;                  // D6
 constexpr uint8_t ENCODER_B_PIN = 1;                  // D7
 constexpr uint8_t ENCODER_BUTTON_PIN = 2;             // D8
 constexpr int8_t ENCODER_DIRECTION = 1;
-// EC11E18244A5: 36 dtents / 18 pulses, two transitions per detent.
+// EC11E18244A5: 36 detents / 18 pulses, two transitions per detent.
 constexpr int8_t ENCODER_TRANSITIONS_PER_STEP = 2;
 constexpr uint8_t GROUP_COUNT = 6;
-constexpr uint8_t PATTERN_COUNT = 5;
+constexpr uint8_t PATTERN_COUNT = 10;
 constexpr uint8_t BRIGHTNESS_STEP = 8;
+constexpr uint32_t FRAME_INTERVAL_MS = 10;
+constexpr uint32_t AUTO_PATTERN_MS = 10000;
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 25;
 constexpr uint32_t LONG_PRESS_MS = 1200;
 constexpr uint16_t MIN_SPEED_PERCENT = 25;
@@ -39,6 +42,37 @@ uint32_t buttonPressedAt = 0;
 bool statusPending = true;
 bool helpPending = false;
 bool serialWasConnected = false;
+bool autoMode = false;
+bool paused = false;
+uint32_t pausedAt = 0;
+uint32_t autoChangedAt = 0;
+uint32_t lastFrameAt = 0;
+uint8_t lastOutput[GROUP_COUNT] = {};
+uint8_t lastIndicator = 255;
+
+void restartPattern(uint32_t now) {
+  patternStartedAt = now;
+  autoChangedAt = now;
+  pausedAt = now;
+}
+
+void toggleAutoMode(uint32_t now) {
+  autoMode = !autoMode;
+  autoChangedAt = paused ? pausedAt : now;
+  statusPending = true;
+}
+
+void togglePause(uint32_t now) {
+  if (paused) {
+    const uint32_t pauseDuration = now - pausedAt;
+    patternStartedAt += pauseDuration;
+    autoChangedAt += pauseDuration;
+  } else {
+    pausedAt = now;
+  }
+  paused = !paused;
+  statusPending = true;
+}
 
 void changeBrightness(int direction) {
   const int value = brightness + direction * BRIGHTNESS_STEP;
@@ -61,8 +95,8 @@ void changeSpeed(int direction, uint32_t now) {
   } else {
     speedPercent = value;
   }
-  // Speed changes restart the effect at a predictabel phase.
-  patternStartedAt = now;
+  // Speed changes restart the effect at a predictable phase.
+  restartPattern(now);
   statusPending = true;
 }
 
@@ -71,7 +105,7 @@ void nextPattern(uint32_t now) {
   if (pattern >= PATTERN_COUNT) {
     pattern = 0;
   }
-  patternStartedAt = now;
+  restartPattern(now);
   testMode = false;
   statusPending = true;
 }
@@ -79,7 +113,7 @@ void nextPattern(uint32_t now) {
 void toggleTestMode(uint32_t now) {
   testMode = !testMode;
   testGroup = 0;
-  patternStartedAt = now;
+  restartPattern(now);
   statusPending = true;
 }
 
@@ -188,6 +222,10 @@ void pollSerial(uint32_t now) {
       toggleTestMode(now);
     } else if (command == 'n') {
       nextPattern(now);
+    } else if (command == 'a') {
+      toggleAutoMode(now);
+    } else if (command == 'p') {
+      togglePause(now);
     } else if (command == '+') {
       changeBrightness(1);
     } else if (command == '-') {
@@ -205,14 +243,14 @@ void pollSerial(uint32_t now) {
 
   // Keep replies short and wait for USB buffer space rather than blocking LEDs.
   char reply[64];
+  if (!helpPending && !statusPending) return;
+  if (Serial.availableForWrite() < int(sizeof(reply) - 1)) return;
   if (helpPending) {
-    snprintf(reply, sizeof(reply), "s=status t=test n=next 1-6=group +/-=bright </>=speed\n");
+    snprintf(reply, sizeof(reply), "s:info n:next a:auto p:pause t:test 1-6:group +/-:dim <>:speed\n");
   } else if (statusPending) {
-    snprintf(reply, sizeof(reply), "mode=%u bright=%u speed=%u%% test=%u group=%u\n",
+    snprintf(reply, sizeof(reply), "mode=%u b=%u speed=%u%% test=%u g=%u auto=%u pause=%u\n",
              unsigned(pattern + 1), unsigned(brightness), unsigned(speedPercent),
-             unsigned(testMode), unsigned(testGroup + 1));
-  } else {
-    return;
+             unsigned(testMode), unsigned(testGroup + 1), unsigned(autoMode), unsigned(paused));
   }
   const size_t length = strlen(reply);
   if (Serial.availableForWrite() >= int(length)) {
@@ -273,6 +311,47 @@ uint8_t patternLevel(uint8_t selected, uint8_t group, uint32_t elapsed) {
     return 0;
   }
 
+  if (selected == 5) {
+    int head = (elapsed / 130) % (2 * (GROUP_COUNT - 1));
+    if (head >= GROUP_COUNT) head = 2 * (GROUP_COUNT - 1) - head;
+    int distance = head - group;
+    if (distance < 0) distance = -distance;
+    if (distance == 0) return 255;
+    if (distance == 1) return 60;
+    return 0;
+  }
+
+  if (selected == 6) {
+    uint32_t phase = (elapsed % 1800 + group * 300) % 1800;
+    uint32_t ramp = phase;
+    if (phase > 900) ramp = 1800 - phase;
+    return ramp * 255 / 900;
+  }
+
+  if (selected == 7) {
+    int litGroups = (elapsed / 180) % (GROUP_COUNT * 2);
+    if (litGroups > GROUP_COUNT) litGroups = GROUP_COUNT * 2 - litGroups;
+    if (group < litGroups) return 255;
+    return 0;
+  }
+
+  if (selected == 8) {
+    const uint8_t sparkGroups[] = {0, 3, 1, 5, 2, 4, 1, 4, 0, 2, 5, 3};
+    uint8_t step = (elapsed / 110) % sizeof(sparkGroups);
+    if (group == sparkGroups[step]) return 255 - (elapsed % 110) * 255 / 110;
+    return 8;
+  }
+
+  if (selected == 9) {
+    int clockwise = (elapsed / 160) % GROUP_COUNT;
+    int counterclockwise = (GROUP_COUNT - clockwise) % GROUP_COUNT;
+    int behindClockwise = (clockwise + GROUP_COUNT - group) % GROUP_COUNT;
+    int behindCounterclockwise = (group + GROUP_COUNT - counterclockwise) % GROUP_COUNT;
+    if (behindClockwise == 0 || behindCounterclockwise == 0) return 255;
+    if (behindClockwise == 1 || behindCounterclockwise == 1) return 60;
+    return 0;
+  }
+
   return 0;
 }
 
@@ -284,12 +363,26 @@ void render(uint32_t elapsed) {
     } else {
       level = patternLevel(pattern, group, elapsed);
     }
-    float output = level;
-    output = output * brightness;
-    output = output + 127;
-    output = output / 255;
-    analogWrite(LED_PINS[group], int(output));
+    const uint8_t output = (level * brightness + 127) / 255;
+    if (output != lastOutput[group]) {
+      analogWrite(LED_PINS[group], output);
+      lastOutput[group] = output;
+    }
   }
+}
+
+void updateIndicator() {
+  uint8_t mode = 0;
+  if (testMode) mode = 3;
+  else if (paused) mode = 2;
+  else if (autoMode) mode = 1;
+  if (mode == lastIndicator) return;
+
+  // The XIAO's built-in red, green and blue LEDs are active low.
+  digitalWrite(PIN_LED_R, (mode == 2 || mode == 3) ? LOW : HIGH);
+  digitalWrite(PIN_LED_G, (mode == 1 || mode == 2) ? LOW : HIGH);
+  digitalWrite(PIN_LED_B, mode == 0 ? LOW : HIGH);
+  lastIndicator = mode;
 }
 
 void setup() {
@@ -301,6 +394,10 @@ void setup() {
   }
   analogWriteFreq(2000);
   analogWriteRange(255);
+  for (uint8_t pin : STATUS_LED_PINS) {
+    digitalWrite(pin, HIGH);
+    pinMode(pin, OUTPUT);
+  }
 
   // External 10 kΩ pull-ups already connect the encoder inputs to 3.3 V.
   pinMode(ENCODER_A_PIN, INPUT);
@@ -311,8 +408,10 @@ void setup() {
   buttonStable = buttonRaw;
   buttonUsedForAdjustment = buttonStable;
   buttonChangedAt = millis();
-  patternStartedAt = buttonChangedAt;
+  restartPattern(buttonChangedAt);
+  lastFrameAt = buttonChangedAt;
   render(0);
+  updateIndicator();
 }
 
 void loop() {
@@ -320,7 +419,15 @@ void loop() {
   pollEncoder(now);
   pollButton(now);
   pollSerial(now);
-  // Unsigned subtraction also works when millis() wraps around. took me 10min just to figure that out.
-  const uint64_t elapsed = uint32_t(now - patternStartedAt);
+  if (autoMode && !paused && !testMode &&
+      uint32_t(now - autoChangedAt) >= AUTO_PATTERN_MS) {
+    nextPattern(now);
+  }
+  updateIndicator();
+  if (uint32_t(now - lastFrameAt) < FRAME_INTERVAL_MS) return;
+  lastFrameAt = now;
+  // Unsigned subtraction also works when millis() wraps around.
+  const uint32_t effectNow = paused ? pausedAt : now;
+  const uint64_t elapsed = uint32_t(effectNow - patternStartedAt);
   render(uint32_t(elapsed * speedPercent / 100));
 }

@@ -8,3 +8,5 @@ AGENTS.md
 *-backups/
 .history/
 firmware/build/
+firmware/tests/
+assets/journal/
